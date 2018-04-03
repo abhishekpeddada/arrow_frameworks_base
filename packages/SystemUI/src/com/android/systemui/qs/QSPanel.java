@@ -25,6 +25,9 @@ import android.content.res.Configuration;
 import android.content.res.Resources;
 import android.graphics.Rect;
 import android.os.Bundle;
+import android.os.Handler;
+import android.os.Message;
+import android.os.UserHandle;
 import android.provider.Settings;
 import android.util.ArrayMap;
 import android.util.AttributeSet;
@@ -55,6 +58,8 @@ public class QSPanel extends LinearLayout implements Tunable {
 
     public static final String QS_SHOW_BRIGHTNESS = "qs_show_brightness";
     public static final String QS_SHOW_HEADER = "qs_show_header";
+    public static final String QS_BRIGHTNESS_SLIDER_POSITION =
+            Settings.Secure.QS_BRIGHTNESS_SLIDER_POSITION;
 
     public static final String QS_UI_STYLE =
             "system:" + Settings.System.QS_UI_STYLE;
@@ -76,6 +81,10 @@ public class QSPanel extends LinearLayout implements Tunable {
     protected View mBrightnessView;
     @Nullable
     protected BrightnessSliderController mToggleSliderController;
+
+    protected Runnable mBrightnessRunnable;
+
+    protected boolean mTop;
 
     /** Whether or not the QS media player feature is enabled. */
     protected boolean mUsingMediaPlayer;
@@ -187,21 +196,28 @@ public class QSPanel extends LinearLayout implements Tunable {
             removeView(mBrightnessView);
             mMovableContentStartIndex--;
         }
-        addView(view, 0);
         mBrightnessView = view;
 
-        setBrightnessViewMargin();
-
-        mMovableContentStartIndex++;
+        setBrightnessViewMargin(true);
+        if (mBrightnessView != null) {
+            addView(mBrightnessView);
+            mMovableContentStartIndex++;
+        }
     }
 
-    private void setBrightnessViewMargin() {
+    private void setBrightnessViewMargin(boolean top) {
         if (mBrightnessView != null) {
             MarginLayoutParams lp = (MarginLayoutParams) mBrightnessView.getLayoutParams();
-            lp.topMargin = mContext.getResources()
-                    .getDimensionPixelSize(R.dimen.qs_brightness_margin_top);
-            lp.bottomMargin = mContext.getResources()
-                    .getDimensionPixelSize(R.dimen.qs_brightness_margin_bottom);
+            if (top) {
+                lp.topMargin = mContext.getResources()
+                        .getDimensionPixelSize(R.dimen.qs_brightness_margin_top);
+                lp.bottomMargin = mContext.getResources()
+                        .getDimensionPixelSize(R.dimen.qs_brightness_margin_bottom);
+            } else {
+                lp.topMargin = mContext.getResources()
+                        .getDimensionPixelSize(R.dimen.quick_qs_brightness_margin_top);
+                lp.bottomMargin = 0;
+            }
             mBrightnessView.setLayoutParams(lp);
         }
     }
@@ -326,13 +342,18 @@ public class QSPanel extends LinearLayout implements Tunable {
 
     @Override
     public void onTuningChanged(String key, String newValue) {
-        if (QS_SHOW_BRIGHTNESS.equals(key) && mBrightnessView != null) {
-            updateViewVisibilityForTuningValue(mBrightnessView, newValue);
-        }
+        switch (key) {
+            case QS_BRIGHTNESS_SLIDER_POSITION:
+                mTop = TunerService.parseInteger(newValue, 0) == 0;
+                updateBrightnessSliderPosition();
+                break;
+            default:
+                break;
+         }
     }
 
-    private void updateViewVisibilityForTuningValue(View view, @Nullable String newValue) {
-        view.setVisibility(TunerService.parseIntegerSwitch(newValue, true) ? VISIBLE : GONE);
+    public void setBrightnessRunnable(Runnable runnable) {
+        mBrightnessRunnable = runnable;
     }
 
 
@@ -368,7 +389,7 @@ public class QSPanel extends LinearLayout implements Tunable {
 
         updatePageIndicator();
 
-        setBrightnessViewMargin();
+        setBrightnessViewMargin(mTop);
 
         if (mTileLayout != null) {
             mTileLayout.updateResources();
@@ -441,6 +462,18 @@ public class QSPanel extends LinearLayout implements Tunable {
         // Let's first move the tileLayout to the new parent, since that should come first.
         switchToParent((View) newLayout, parent, index);
         index++;
+
+        if (mBrightnessView != null) {
+            mTop = Settings.Secure.getIntForUser(mContext.getContentResolver(),
+                Settings.Secure.QS_BRIGHTNESS_SLIDER_POSITION,
+                0, UserHandle.USER_CURRENT) == 0;
+            if (!mUsingHorizontalLayout) {
+                switchToParent(mBrightnessView, parent, mTop ? 0 : index);
+                index++;
+            } else {
+                updateBrightnessSliderPosition();
+            }
+        }
 
         if (mFooter != null) {
             // Then the footer with the settings
@@ -671,6 +704,27 @@ public class QSPanel extends LinearLayout implements Tunable {
      */
     public void setCanCollapse(boolean canCollapse) {
         mCanCollapse = canCollapse;
+    }
+
+    private void updateBrightnessSliderPosition() {
+        if (mBrightnessView == null) return;
+        removeView(mBrightnessView);
+        addView(mBrightnessView, mTop ? 0 : 1);
+        if (mBrightnessRunnable != null) {
+            updateResources();
+            mBrightnessRunnable.run();
+        }
+    }
+
+    private class H extends Handler {
+        private static final int ANNOUNCE_FOR_ACCESSIBILITY = 1;
+
+        @Override
+        public void handleMessage(Message msg) {
+            if (msg.what == ANNOUNCE_FOR_ACCESSIBILITY) {
+                announceForAccessibility((CharSequence) msg.obj);
+            }
+        }
     }
 
     public interface QSTileLayout {
