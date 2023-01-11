@@ -11437,6 +11437,12 @@ public final class Settings {
          * @hide
          */
         public static final String DOZE_ON_CHARGE = "doze_on_charge";
+       
+       /**
+         * Quicksettings tile shape
+         * @hide
+         */
+        public static final String QS_TILE_SHAPE = "qs_tile_shape";
 
         /**
          * These entries are considered common between the personal and the managed profile,
