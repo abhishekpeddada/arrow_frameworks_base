@@ -19,16 +19,15 @@ package com.android.keyguard;
 import android.view.View;
 import android.widget.LinearLayout;
 
-import androidx.constraintlayout.helper.widget.Flow;
-import android.provider.Settings;
-
+import androidx.constraintlayout.widget.ConstraintLayout;
+import android.os.UserHandle;
 import com.android.internal.util.LatencyTracker;
 import com.android.internal.widget.LockPatternUtils;
 import com.android.keyguard.KeyguardSecurityModel.SecurityMode;
 import com.android.systemui.R;
 import com.android.systemui.classifier.FalsingCollector;
 import com.android.systemui.statusbar.policy.DevicePostureController;
-
+import android.provider.Settings;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -43,7 +42,10 @@ public class KeyguardPinViewController
     private final LockPatternUtils mLockPatternUtils;
     private int mPinLength = -1;
 
-    private static List<Integer> sNumbers = Arrays.asList(1, 2, 3, 4, 5, 6, 7, 8, 9, 0);
+    private boolean mScramblePin;
+
+    private List<Integer> mNumbers = Arrays.asList(1, 2, 3, 4, 5, 6, 7, 8, 9, 0);
+    private final List<Integer> mDefaultNumbers = List.of(mNumbers.toArray(new Integer[0]));
 
     protected KeyguardPinViewController(KeyguardPINView view,
             KeyguardUpdateMonitor keyguardUpdateMonitor,
@@ -74,34 +76,39 @@ public class KeyguardPinViewController
             });
         }
 
-        boolean scramblePin = Settings.System.getInt(getContext().getContentResolver(),
-                Settings.System.LOCKSCREEN_PIN_SCRAMBLE_LAYOUT, 0) == 1;
+        mPostureController.addCallback(mPostureCallback);
+    }
 
-        if (scramblePin) {
-            Collections.shuffle(sNumbers);
+    private void updatePinScrambling() {
+        boolean scramblePin = Settings.System.getIntForUser(getContext().getContentResolver(),
+                Settings.System.LOCKSCREEN_PIN_SCRAMBLE_LAYOUT, 0,
+                UserHandle.USER_CURRENT) == 1;
+
+        if (scramblePin || scramblePin != mScramblePin) {
+            mScramblePin = scramblePin;
+            if (scramblePin) {
+                Collections.shuffle(mNumbers);
+            } else {
+                mNumbers = new ArrayList<>(mDefaultNumbers);
+            }
+
             // get all children who are NumPadKey's
-            LinearLayout container = (LinearLayout) mView.findViewById(R.id.pin_container);
+            ConstraintLayout container = (ConstraintLayout) mView.findViewById(R.id.pin_container);
 
             List<NumPadKey> views = new ArrayList<NumPadKey>();
             for (int i = 0; i < container.getChildCount(); i++) {
-                if (container.getChildAt(i) instanceof LinearLayout) {
-                    LinearLayout nestedLayout = ((LinearLayout) container.getChildAt(i));
-                    for (int j = 0; j < nestedLayout.getChildCount(); j++){
-                        View view = nestedLayout.getChildAt(j);
-                        if (view.getClass() == NumPadKey.class) {
-                            views.add((NumPadKey) view);
-                        }
-                    }
+                View view = container.getChildAt(i);
+                if (view.getClass() == NumPadKey.class) {
+                    views.add((NumPadKey) view);
                 }
             }
 
             // reset the digits in the views
-            for (int i = 0; i < sNumbers.size(); i++) {
+            for (int i = 0; i < mNumbers.size(); i++) {
                 NumPadKey view = views.get(i);
-                view.setDigit(sNumbers.get(i));
+                view.setDigit(mNumbers.get(i));
             }
         }
-        mPostureController.addCallback(mPostureCallback);
     }
 
     @Override
@@ -125,6 +132,12 @@ public class KeyguardPinViewController
 
         mPinLength = mLockPatternUtils.getCredentialLength(KeyguardUpdateMonitor.getCurrentUser());
         mView.showUnlockButton(mPinLength == -1);
+    }
+ 
+    @Override
+    public void startAppearAnimation() {
+        updatePinScrambling();
+        mView.startAppearAnimation();
     }
 
     @Override
