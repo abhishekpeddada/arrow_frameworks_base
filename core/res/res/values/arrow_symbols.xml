@@ -113,4 +113,8 @@
 
     <!-- Bootleg unneccesary gradient declaration | Just for our shishu bars -->
   <java-symbol type="color" name="bootleg_accent_gradient_end_color" />
+
+    <!-- SystemUI restart dialog -->
+    <java-symbol type="string" name="systemui_restart_title" />
+    <java-symbol type="string" name="systemui_restart_message" />
 </resources>
