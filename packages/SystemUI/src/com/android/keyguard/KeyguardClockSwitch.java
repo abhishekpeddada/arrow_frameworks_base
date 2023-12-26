@@ -28,6 +28,10 @@ import com.android.systemui.plugins.log.LogLevel;
 import java.io.PrintWriter;
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
+import android.database.ContentObserver;
+import android.os.UserHandle;
+import android.provider.Settings;
+import com.android.systemui.util.settings.SecureSettings;
 
 import kotlin.Unit;
 
@@ -49,6 +53,7 @@ public class KeyguardClockSwitch extends RelativeLayout {
 
     public static final int LARGE = 0;
     public static final int SMALL = 1;
+    private boolean mEnableCustomClock = true;
 
     /** Returns a region for the large clock to position itself, based on the given parent. */
     public static Rect getLargeClockRegion(ViewGroup parent) {
@@ -71,6 +76,7 @@ public class KeyguardClockSwitch extends RelativeLayout {
     private FrameLayout mSmallClockFrame;
     private FrameLayout mLargeClockFrame;
     private ClockController mClock;
+    private SecureSettings mSecureSettings;
 
     private View mStatusArea;
     private int mSmartspaceTopOffset;
@@ -139,6 +145,24 @@ public class KeyguardClockSwitch extends RelativeLayout {
     public LogBuffer getLogBuffer() {
         return mLogBuffer;
     }
+    
+    private final ContentObserver mCustomClockObserver = new ContentObserver(null) {
+        @Override
+        public void onChange(boolean change) {
+            updateCustomClock();
+            updateClockTargetRegions();
+        }
+    };
+    
+    private void updateCustomClock() {
+        mEnableCustomClock = mSecureSettings.getIntForUser(
+            Settings.Secure.CLOCK_LS, 1,
+                UserHandle.USER_CURRENT) != 0;
+        RelativeLayout.LayoutParams params= new RelativeLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT,ViewGroup.LayoutParams.WRAP_CONTENT);
+    	params.addRule(RelativeLayout.BELOW, mEnableCustomClock ? R.id.clock_ls : R.id.lockscreen_clock_view);  
+        mStatusArea.setLayoutParams(params);
+        
+    }
 
     void setClock(ClockController clock, int statusBarState) {
         mClock = clock;
@@ -157,9 +181,10 @@ public class KeyguardClockSwitch extends RelativeLayout {
         // Attach small and big clock views to hierarchy.
         if (mLogBuffer != null) {
             mLogBuffer.log(TAG, LogLevel.INFO, "Attached new clock views to switch");
-        }
-        mSmallClockFrame.addView(clock.getSmallClock().getView());
+        } 
+    	mSmallClockFrame.addView(clock.getSmallClock().getView());
         mLargeClockFrame.addView(clock.getLargeClock().getView());
+        
         updateClockTargetRegions();
     }
 
@@ -207,9 +232,10 @@ public class KeyguardClockSwitch extends RelativeLayout {
         int direction = 1;
         float statusAreaYTranslation;
         if (useLargeClock) {
-            out = mSmallClockFrame;
             in = mLargeClockFrame;
-            if (indexOfChild(in) == -1) addView(in, 0);
+            out = mSmallClockFrame;
+            
+        	if (indexOfChild(in) == -1) addView(in, 0);
             direction = -1;
             statusAreaYTranslation = mSmallClockFrame.getTop() - mStatusArea.getTop()
                     + mSmartspaceTopOffset;
@@ -220,7 +246,7 @@ public class KeyguardClockSwitch extends RelativeLayout {
 
             // Must remove in order for notifications to appear in the proper place
             removeView(out);
-        }
+        } 
 
         if (!animate) {
             out.setAlpha(0f);
@@ -228,8 +254,8 @@ public class KeyguardClockSwitch extends RelativeLayout {
             in.setVisibility(VISIBLE);
             mStatusArea.setTranslationY(statusAreaYTranslation);
             return;
-        }
-
+        } 
+        
         mClockOutAnim = new AnimatorSet();
         mClockOutAnim.setDuration(CLOCK_OUT_MILLIS);
         mClockOutAnim.setInterpolator(Interpolators.FAST_OUT_LINEAR_IN);
@@ -242,7 +268,7 @@ public class KeyguardClockSwitch extends RelativeLayout {
                 mClockOutAnim = null;
             }
         });
-
+        
         in.setAlpha(0);
         in.setVisibility(View.VISIBLE);
         mClockInAnim = new AnimatorSet();
@@ -256,7 +282,7 @@ public class KeyguardClockSwitch extends RelativeLayout {
                 mClockInAnim = null;
             }
         });
-
+             
         mClockInAnim.start();
         mClockOutAnim.start();
 

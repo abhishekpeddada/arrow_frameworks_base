@@ -225,5 +225,6 @@ public class SecureSettings {
         Settings.Secure.ACCESSIBILITY_FONT_SCALING_HAS_BEEN_CHANGED,
         Settings.Secure.TETHERING_ALLOW_VPN_UPSTREAMS,
         Settings.Secure.DOZE_ON_CHARGE
+        Settings.Secure.CLOCK_LS
     };
 }
